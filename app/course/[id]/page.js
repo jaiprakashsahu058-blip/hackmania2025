@@ -1,0 +1,446 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import { useParams, useRouter } from 'next/navigation';
+import { motion, AnimatePresence } from 'framer-motion';
+import { ArrowLeft, BookOpen, Zap, Clock, Play, Edit3, Save, X, ListTree, ChevronDown, Video } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import AuthGuard from '@/components/AuthGuard';
+import YouTubeVideo from '@/components/YouTubeVideo';
+import { getYouTubeEmbedUrl } from '@/lib/utils/youtube';
+
+export default function CourseDetail() {
+  const { id } = useParams();
+  const router = useRouter();
+  const [course, setCourse] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isEditing, setIsEditing] = useState({});
+  const [activeChapterId, setActiveChapterId] = useState(null);
+  const [expandedChapters, setExpandedChapters] = useState(new Set());
+
+  useEffect(() => {
+    fetchCourse();
+  }, [id]);
+
+  useEffect(() => {
+    if (course?.chapters?.length && !activeChapterId) {
+      setActiveChapterId(course.chapters[0].id);
+    }
+  }, [course, activeChapterId]);
+
+  const fetchCourse = async () => {
+    try {
+      const response = await fetch(`/api/courses/${id}`);
+      if (response.ok) {
+        const data = await response.json();
+        setCourse(data.course);
+      } else {
+        console.error('Failed to fetch course');
+        setCourse(null);
+      }
+    } catch (error) {
+      console.error('Error fetching course:', error);
+      setCourse(null);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const startEditing = (field) => {
+    setIsEditing(prev => ({ ...prev, [field]: true }));
+  };
+
+  const saveEdit = (field, value) => {
+    setCourse(prev => ({ ...prev, [field]: value }));
+    setIsEditing(prev => ({ ...prev, [field]: false }));
+  };
+
+  const EditableField = ({ value, onSave, placeholder, className = '' }) => {
+    const [editValue, setEditValue] = useState(value);
+    return (
+      <div className="flex items-center gap-2">
+        <Input
+          value={editValue}
+          onChange={(e) => setEditValue(e.target.value)}
+          placeholder={placeholder}
+          className={className}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') onSave(editValue);
+            if (e.key === 'Escape') {
+              setEditValue(value);
+              onSave(value);
+            }
+          }}
+        />
+        <Button size="sm" variant="ghost" onClick={() => onSave(editValue)} className="h-10 w-10 p-2">
+          <Save className="h-4 w-4" />
+        </Button>
+        <Button size="sm" variant="ghost" onClick={() => { setEditValue(value); onSave(value); }} className="h-10 w-10 p-2">
+          <X className="h-4 w-4" />
+        </Button>
+      </div>
+    );
+  };
+
+  const getYouTubeEmbedUrl = (url) => {
+    if (!url) return null;
+    try {
+      if (/youtube\.com\/embed\//i.test(url)) return url;
+      const watchMatch = url.match(/[?&]v=([^&\n?#]+)/i);
+      if (watchMatch && watchMatch[1]) {
+        return `https://www.youtube.com/embed/${watchMatch[1]}`;
+      }
+      const shortMatch = url.match(/youtu\.be\/([^&\n?#]+)/i);
+      if (shortMatch && shortMatch[1]) {
+        return `https://www.youtube.com/embed/${shortMatch[1]}`;
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  };
+
+  const toggleChapterExpansion = (chapterId) => {
+    setExpandedChapters(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(chapterId)) {
+        newSet.delete(chapterId);
+      } else {
+        newSet.add(chapterId);
+      }
+      return newSet;
+    });
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-gray-900 via-purple-900 to-blue-900">
+        <div className="text-center">
+          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-purple-500 to-violet-600 animate-pulse shadow-lg shadow-purple-500/50">
+            <BookOpen className="h-8 w-8 text-white" />
+          </div>
+          <p className="text-white/70">Loading course...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!course) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-gray-900 via-purple-900 to-blue-900">
+        <div className="text-center">
+          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-red-500 to-rose-600 shadow-lg shadow-red-500/50">
+            <BookOpen className="h-8 w-8 text-white" />
+          </div>
+          <p className="mb-4 text-white/70">Course not found or failed to load</p>
+          <p className="mb-6 text-sm text-white/50">The course may have been deleted or there was an error loading it.</p>
+          <Button onClick={() => router.push('/dashboard')} className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700">
+            Back to Dashboard
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  const activeChapter = course.chapters?.find((c) => c.id === activeChapterId) || null;
+
+  return (
+    <AuthGuard>
+      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-purple-900 to-blue-900 relative overflow-hidden">
+        {/* Holographic Background Effects */}
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-purple-500/20 via-transparent to-blue-500/20"></div>
+        <div className="absolute inset-0 bg-[conic-gradient(from_0deg_at_50%_50%,_transparent_0deg,_purple-500/10_60deg,_transparent_120deg,_blue-500/10_180deg,_transparent_240deg,_purple-500/10_300deg,_transparent_360deg)] animate-spin [animation-duration:20s]"></div>
+        
+        {/* Header with Enhanced Glass Effect */}
+        <div className="bg-black/20 backdrop-blur-2xl border-b border-purple-500/30 shadow-2xl relative z-10">
+          <div className="max-w-7xl mx-auto px-6 py-6">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-4">
+                <Button
+                  variant="ghost"
+                  onClick={() => router.push('/dashboard')}
+                  className="flex items-center space-x-3 text-white/90 hover:text-purple-300 hover:bg-purple-500/20 rounded-xl px-4 py-2 transition-all duration-300 border border-white/10 hover:border-purple-400/50"
+                >
+                  <ArrowLeft className="w-5 h-5" />
+                  <span className="font-medium">Back to Dashboard</span>
+                </Button>
+                <div className="h-8 w-px bg-gradient-to-b from-transparent via-white/30 to-transparent" />
+                <div className="flex items-center space-x-3">
+                  <div className="w-12 h-12 bg-gradient-to-br from-purple-500 via-blue-500 to-cyan-500 rounded-full flex items-center justify-center shadow-lg shadow-purple-500/50 animate-pulse">
+                    <BookOpen className="w-6 h-6 text-white" />
+                  </div>
+                  <div>
+                    <h1 className="text-3xl font-bold text-white bg-gradient-to-r from-white via-purple-200 to-blue-200 bg-clip-text text-transparent">
+                      {isEditing.title ? (
+                        <EditableField
+                          value={course?.title || ''}
+                          onSave={(value) => saveEdit('title', value)}
+                          placeholder="Course title"
+                          className="text-3xl font-bold bg-white/10 border-purple-400/50 text-white placeholder-white/50"
+                        />
+                      ) : (
+                        <span
+                          onClick={() => startEditing('title')}
+                          className="cursor-pointer hover:text-purple-300 transition-all duration-300 hover:drop-shadow-[0_0_20px_rgba(168,85,247,0.5)]"
+                        >
+                          {course?.title || 'Loading...'}
+                        </span>
+                      )}
+                    </h1>
+                    <div className="flex items-center space-x-4 text-sm text-white/70">
+                      <span className="px-3 py-1 bg-purple-500/20 rounded-full border border-purple-400/30">{course?.category}</span>
+                      <span className="px-3 py-1 bg-blue-500/20 rounded-full border border-blue-400/30">{course?.difficulty}</span>
+                      <span className="px-3 py-1 bg-cyan-500/20 rounded-full border border-cyan-400/30">{course?.duration}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="flex items-center space-x-6">
+                <div className="flex items-center space-x-2 text-sm text-white/70 bg-white/5 px-4 py-2 rounded-full border border-white/10">
+                  <Clock className="w-4 h-4 text-purple-300" />
+                  <span>{course?.duration}</span>
+                </div>
+                <div className="flex items-center space-x-2 text-sm text-white/70 bg-white/5 px-4 py-2 rounded-full border border-white/10">
+                  <ListTree className="w-4 h-4 text-blue-300" />
+                  <span>{course?.chapters?.length || 0} chapters</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="max-w-7xl mx-auto px-6 py-8 relative z-10">
+          {/* Course Videos Section */}
+          {course?.includeVideos && course?.videoUrls && course.videoUrls.length > 0 && (
+            <motion.div 
+              className="mb-8"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6 }}
+            >
+              <Card className="border-0 bg-black/20 backdrop-blur-xl shadow-2xl border-red-500/20">
+                <CardHeader>
+                  <div className="flex items-center space-x-3">
+                    <Video className="w-6 h-6 text-red-400" />
+                    <CardTitle className="text-2xl text-white bg-gradient-to-r from-white via-red-200 to-orange-200 bg-clip-text text-transparent">
+                      Course Videos
+                    </CardTitle>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {course.videoUrls.map((url, index) => (
+                      <motion.div
+                        key={index}
+                        initial={{ opacity: 0, scale: 0.9 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        transition={{ delay: index * 0.1, duration: 0.4 }}
+                      >
+                        <YouTubeVideo 
+                          url={url} 
+                          title={`Course Video ${index + 1}`}
+                          className="w-full"
+                        />
+                      </motion.div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            </motion.div>
+          )}
+
+          {/* Two-column layout */}
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+            {/* Left: Enhanced Chapter List */}
+            <Card className="lg:col-span-4 border-0 bg-black/20 backdrop-blur-xl shadow-2xl border-purple-500/20">
+              <CardHeader className="flex-row items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <ListTree className="h-5 w-5 text-purple-300" />
+                  <CardTitle className="text-white">Chapters</CardTitle>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <div className="sticky top-24 space-y-2">
+                  {(course.chapters || []).map((ch, idx) => {
+                    const active = ch.id === activeChapterId;
+                    const expanded = expandedChapters.has(ch.id);
+                    return (
+                      <motion.div
+                        key={ch.id}
+                        initial={{ opacity: 0, x: -20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: idx * 0.1 }}
+                      >
+                        <button
+                          onClick={() => setActiveChapterId(ch.id)}
+                          className={`group flex w-full items-center justify-between rounded-xl border px-4 py-3 text-left transition-all duration-300 ${
+                            active 
+                              ? 'border-purple-400 bg-purple-500/20 text-purple-100 shadow-lg shadow-purple-500/30 cursor-default' 
+                              : 'border-white/10 hover:border-purple-400/50 hover:bg-purple-500/10 text-white/80 hover:text-white'
+                          }`}
+                        >
+                          <span className="flex items-center gap-3">
+                            <span className={`flex h-8 w-8 items-center justify-center rounded-lg text-sm font-bold transition-all duration-300 ${
+                              active 
+                                ? 'bg-gradient-to-br from-purple-500 to-blue-500 text-white shadow-lg shadow-purple-500/50' 
+                                : 'bg-white/10 text-white/70 group-hover:bg-purple-500/30 group-hover:text-white'
+                            }`}>
+                              {idx + 1}
+                            </span>
+                            <span className="line-clamp-1 text-sm font-medium">{ch.title}</span>
+                          </span>
+                          <ChevronDown 
+                            className={`h-4 w-4 transition-all duration-300 ${
+                              active ? 'text-purple-300' : 'text-white/40 group-hover:text-white/70'
+                            } ${expanded ? 'rotate-180' : ''}`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleChapterExpansion(ch.id);
+                            }}
+                          />
+                        </button>
+                        
+                        {/* Chapter Sub-topics */}
+                        <AnimatePresence>
+                          {expanded && (
+                            <motion.div
+                              initial={{ opacity: 0, height: 0 }}
+                              animate={{ opacity: 1, height: 'auto' }}
+                              exit={{ opacity: 0, height: 0 }}
+                              transition={{ duration: 0.3 }}
+                              className="ml-4 mt-2 space-y-1"
+                            >
+                              {ch.description && (
+                                <div className="text-xs text-white/60 p-2 bg-white/5 rounded-lg border border-white/10">
+                                  {ch.description}
+                                </div>
+                              )}
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </motion.div>
+                    );
+                  })}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Right: Enhanced Content Pane */}
+            <div className="lg:col-span-8">
+              <AnimatePresence mode="wait">
+                <motion.div 
+                  key={activeChapterId} 
+                  initial={{ opacity: 0, y: 20, scale: 0.95 }} 
+                  animate={{ opacity: 1, y: 0, scale: 1 }} 
+                  exit={{ opacity: 0, y: -20, scale: 0.95 }} 
+                  transition={{ duration: 0.4 }}
+                >
+                  <Card className="border-0 bg-black/20 backdrop-blur-xl shadow-2xl border-purple-500/20">
+                    <CardHeader>
+                      <CardTitle className="text-2xl text-white bg-gradient-to-r from-white via-purple-200 to-blue-200 bg-clip-text text-transparent">
+                        {activeChapter?.title || 'Chapter'}
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-6">
+                      {/* Enhanced Video Players with improved embedding */}
+                      {Array.isArray(activeChapter?.videoUrls) && activeChapter.videoUrls.length > 0 ? (
+                        <div className="space-y-6">
+                          <div className="flex items-center space-x-3 mb-4">
+                            <Video className="w-6 h-6 text-red-400" />
+                            <h3 className="text-xl font-semibold text-white bg-gradient-to-r from-red-300 to-orange-300 bg-clip-text text-transparent">
+                              Chapter Videos ({activeChapter.videoUrls.length})
+                            </h3>
+                          </div>
+                          {activeChapter.videoUrls.map((url, index) => (
+                            <div key={index} className="space-y-3">
+                              <div className="relative aspect-video overflow-hidden rounded-xl shadow-2xl border border-purple-400/30 bg-black/50">
+                                <div className="absolute inset-0 bg-gradient-to-br from-purple-500/10 to-blue-500/10"></div>
+                                <iframe
+                                  src={url}
+                                  title={`Video ${index + 1}: ${activeChapter?.title}`}
+                                  className="h-full w-full relative z-10 rounded-xl"
+                                  width="100%"
+                                  height="100%"
+                                  frameBorder="0"
+                                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                                  allowFullScreen
+                                  loading="lazy"
+                                />
+                              </div>
+                              {activeChapter.videoUrls.length > 1 && (
+                                <p className="text-sm text-white/60 text-center">
+                                  Video {index + 1} of {activeChapter.videoUrls.length}
+                                </p>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="rounded-xl border border-dashed border-purple-400/30 p-8 text-center bg-gradient-to-br from-purple-500/10 to-blue-500/10">
+                          <Play className="h-12 w-12 mx-auto mb-4 text-purple-300 animate-pulse" />
+                          <p className="text-white/70">No video available for this chapter</p>
+                        </div>
+                      )}
+
+                      {/* Enhanced Description */}
+                      {activeChapter?.description && (
+                        <div className="prose max-w-none text-white/90">
+                          <p className="text-lg leading-relaxed mb-4 text-white/80 bg-white/5 p-4 rounded-lg border border-white/10">
+                            {activeChapter.description}
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Enhanced Key Points with Hexagonal Layout */}
+                      {activeChapter?.content && (
+                        <div className="prose max-w-none text-white/90">
+                          <h3 className="text-xl font-semibold mb-6 text-white bg-gradient-to-r from-purple-300 to-blue-300 bg-clip-text text-transparent">
+                            Key Points:
+                          </h3>
+                          {(() => {
+                            const points = Array.isArray(activeChapter.content)
+                              ? activeChapter.content
+                              : String(activeChapter.content)
+                                  .split(/\n+/)
+                                  .map((s) => s.trim())
+                                  .filter(Boolean);
+                            return (
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {points.map((point, idx) => (
+                                  <motion.div
+                                    key={idx}
+                                    initial={{ opacity: 0, scale: 0.8 }}
+                                    animate={{ opacity: 1, scale: 1 }}
+                                    transition={{ delay: idx * 0.1 }}
+                                    className="relative p-4 bg-gradient-to-br from-purple-500/20 to-blue-500/20 rounded-lg border border-purple-400/30 hover:border-purple-400/50 transition-all duration-300 group"
+                                  >
+                                    <div className="absolute inset-0 bg-gradient-to-br from-purple-500/10 to-blue-500/10 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                                    <div className="relative z-10 flex items-start gap-3">
+                                      <div className="w-6 h-6 bg-gradient-to-br from-purple-500 to-blue-500 rounded-full flex items-center justify-center text-xs font-bold text-white mt-0.5">
+                                        {idx + 1}
+                                      </div>
+                                      <p className="text-white/80 group-hover:text-white transition-colors duration-300">
+                                        {point}
+                                      </p>
+                                    </div>
+                                  </motion.div>
+                                ))}
+                              </div>
+                            );
+                          })()}
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              </AnimatePresence>
+            </div>
+          </div>
+        </div>
+      </div>
+    </AuthGuard>
+  );
+}
