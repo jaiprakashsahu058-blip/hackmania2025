@@ -108,12 +108,21 @@ export default function CourseCard({ course, onDelete }) {
 
 				<Link href={`/course/${course.id}`}>
 					<div className="relative h-40 overflow-hidden">
-						<div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-purple-600 to-violet-600">
-							<div className="text-center text-white">
-								<BookOpen className="mx-auto mb-2 h-12 w-12 opacity-90" />
-								<p className="text-base font-semibold">{course.category || 'Course'}</p>
+						{/* Display course thumbnail (SVG data URI) */}
+						{course.thumbnail ? (
+							<img 
+								src={course.thumbnail} 
+								alt={course.category || 'Course'} 
+								className="h-full w-full object-cover"
+							/>
+						) : (
+							<div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-purple-600 to-violet-600">
+								<div className="text-center text-white">
+									<BookOpen className="mx-auto mb-2 h-12 w-12 opacity-90" />
+									<p className="text-base font-semibold">{course.category || 'Course'}</p>
+								</div>
 							</div>
-						</div>
+						)}
 						<div className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-0 transition-opacity duration-300 group-hover:opacity-100">
 							<div className="flex h-14 w-14 items-center justify-center rounded-full bg-white/90 shadow-md">
 								<Play className="ml-0.5 h-7 w-7 text-neutral-800" />

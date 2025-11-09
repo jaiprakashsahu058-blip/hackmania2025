@@ -1,10 +1,11 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { Loader2, Sparkles, Brain, Zap } from 'lucide-react';
+import { Loader2, Sparkles, Brain, Zap, X, Minimize2 } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
 
-export default function LoadingModal({ isOpen, onOpenChange }) {
+export default function LoadingModal({ isOpen, onOpenChange, onCancel, onBackground }) {
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md border-0 bg-gradient-to-br from-purple-50 to-blue-50">
@@ -97,6 +98,26 @@ export default function LoadingModal({ isOpen, onOpenChange }) {
                 }}
               />
             ))}
+          </div>
+
+          {/* Action Buttons */}
+          <div className="flex gap-3 mt-8 w-full">
+            <Button
+              onClick={onCancel}
+              variant="outline"
+              className="flex-1 border-2 border-red-300 bg-white hover:bg-red-50 text-red-600 hover:text-red-700 transition-all duration-300 shadow-md hover:shadow-lg h-12 rounded-xl font-semibold"
+            >
+              <X className="w-4 h-4 mr-2" />
+              Cancel
+            </Button>
+            <Button
+              onClick={onBackground}
+              variant="outline"
+              className="flex-1 border-2 border-purple-300 bg-white hover:bg-purple-50 text-purple-600 hover:text-purple-700 transition-all duration-300 shadow-md hover:shadow-lg h-12 rounded-xl font-semibold"
+            >
+              <Minimize2 className="w-4 h-4 mr-2" />
+              Wait in Background
+            </Button>
           </div>
         </div>
       </DialogContent>

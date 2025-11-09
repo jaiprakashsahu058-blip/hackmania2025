@@ -4,6 +4,7 @@ import { courses, chapters, users } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { auth, currentUser } from '@clerk/nextjs/server';
 import { validateYouTubeUrls, normalizeYouTubeUrls } from '@/lib/utils/youtube';
+import { generateCategoryThumbnail } from '@/lib/utils/categoryThumbnails';
 
 // GET - Fetch user's courses
 export async function GET() {
@@ -76,15 +77,21 @@ export async function POST(request) {
     const body = await request.json();
     const {
       title,
+      course_title,
       description,
       category,
       difficulty,
       duration,
       chapterCount,
       includeVideos,
+      includeQuiz,
+      include_videos,
+      include_quiz,
       videoUrls,
       topic,
-      generatedChapters
+      modules,
+      generatedChapters,
+      quizzes
     } = body;
 
     // Validate and normalize video URLs if includeVideos is true
@@ -105,22 +112,66 @@ export async function POST(request) {
       processedVideoUrls = normalizeYouTubeUrls(valid);
     }
 
-    // Create course
+    // Debug logging for new structure
+    console.log('💾 Saving course with new JSONB structure:');
+    console.log('📋 Received data:', JSON.stringify({
+      course_title,
+      title,
+      include_quiz,
+      includeQuiz,
+      include_videos,
+      includeVideos,
+      modulesCount: modules?.length || 0,
+      chaptersCount: generatedChapters?.length || 0
+    }, null, 2));
+    
+    console.log(`   📚 Course Title: ${course_title || title}`);
+    console.log(`   🧩 Include Quiz: ${include_quiz || includeQuiz || false}`);
+    console.log(`   🎥 Include Videos: ${include_videos || includeVideos || false}`);
+    
+    if (modules && Array.isArray(modules)) {
+      const modulesWithQuiz = modules.filter(m => m.quiz && m.quiz.length > 0);
+      console.log(`   📖 Modules: ${modules.length} total, ${modulesWithQuiz.length} with quizzes`);
+      modulesWithQuiz.forEach(m => {
+        console.log(`      🧠 ${m.title}: ${m.quiz.length} questions`);
+      });
+    } else {
+      console.log('   ⚠️ No modules data received');
+    }
+    
+    if (generatedChapters && Array.isArray(generatedChapters)) {
+      const chaptersWithQuiz = generatedChapters.filter(ch => ch.quiz && ch.quiz.length > 0);
+      console.log(`   📝 Chapters: ${generatedChapters.length} total, ${chaptersWithQuiz.length} with quizzes`);
+    }
+
+    // Create course with new JSONB structure
+    const courseTitle = course_title || title || `${topic} Course`;
+    const courseCategory = category || 'General';
+    
+    // Generate category-based thumbnail
+    const thumbnail = generateCategoryThumbnail(courseCategory);
+    
     const [newCourse] = await db
       .insert(courses)
       .values({
         userId: existingUsers[0].id,
-        title,
-        description,
-        category: category || 'General',
+        title: courseTitle, // Required NOT NULL field
+        course_title: courseTitle, // New field for API compatibility
+        description: description || `Learn ${topic} with this comprehensive course.`,
+        category: courseCategory,
         difficulty: difficulty || 'Beginner',
-        duration: duration || '3-5 hours',
-        chapterCount: chapterCount || 5,
-        includeVideos: includeVideos || false,
-        videoUrls: processedVideoUrls,
-        topic: topic || title
+        duration: duration || '1-2 hours',
+        chapterCount: chapterCount || (generatedChapters && generatedChapters.length) || (modules && modules.length) || 3, // Required NOT NULL field
+        modules: modules || [], // Store complete modules as JSONB
+        include_quiz: include_quiz || includeQuiz || false,
+        include_videos: include_videos || includeVideos || false,
+        topic: topic || courseTitle,
+        thumbnail: thumbnail, // SVG data URI based on category
+        userDescription: description
       })
       .returning();
+      
+    console.log(`✅ Course saved with ID: ${newCourse.id}`);
 
     // Create chapters with enhanced structure support
     if (generatedChapters && Array.isArray(generatedChapters) && generatedChapters.length > 0) {
@@ -141,12 +192,24 @@ export async function POST(request) {
           duration: '10-15 minutes', // Default duration
           content: contentText,
           videoUrls: urls, // store array of embed URLs or null
+          videoUrl: chapter.videoUrl || null, // single video URL for frontend
+          quiz: chapter.quiz || null, // quiz data as JSONB
           orderIndex: chapter.orderIndex || index + 1
         };
       });
 
       if (chapterData.length > 0) {
+        // Debug logging for quiz data
+        if (includeQuiz) {
+          const chaptersWithQuiz = chapterData.filter(ch => ch.quiz && Array.isArray(ch.quiz) && ch.quiz.length > 0);
+          console.log(`💾 Saving ${chaptersWithQuiz.length}/${chapterData.length} chapters with quiz data`);
+          chaptersWithQuiz.forEach(ch => {
+            console.log(`   📝 ${ch.title}: ${ch.quiz.length} questions`);
+          });
+        }
+        
         await db.insert(chapters).values(chapterData);
+        console.log(`✅ Successfully saved ${chapterData.length} chapters to database`);
       }
     }
 

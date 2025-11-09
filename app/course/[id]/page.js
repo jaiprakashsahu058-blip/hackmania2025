@@ -3,13 +3,16 @@
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, BookOpen, Zap, Clock, Play, Edit3, Save, X, ListTree, ChevronDown, Video } from 'lucide-react';
+import { ArrowLeft, BookOpen, Zap, Clock, Play, Edit3, Save, X, ListTree, ChevronDown, Video, CheckCircle2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import AuthGuard from '@/components/AuthGuard';
 import YouTubeVideo from '@/components/YouTubeVideo';
 import { getYouTubeEmbedUrl } from '@/lib/utils/youtube';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import ModuleQuiz from '@/components/ModuleQuiz';
 
 export default function CourseDetail() {
   const { id } = useParams();
@@ -19,6 +22,8 @@ export default function CourseDetail() {
   const [isEditing, setIsEditing] = useState({});
   const [activeChapterId, setActiveChapterId] = useState(null);
   const [expandedChapters, setExpandedChapters] = useState(new Set());
+  const [completedModules, setCompletedModules] = useState(new Set());
+  const [activeModuleIndex, setActiveModuleIndex] = useState(0);
 
   useEffect(() => {
     fetchCourse();
@@ -27,6 +32,10 @@ export default function CourseDetail() {
   useEffect(() => {
     if (course?.chapters?.length && !activeChapterId) {
       setActiveChapterId(course.chapters[0].id);
+    }
+    // Support new modules structure
+    if (course?.modules?.length && activeModuleIndex === 0) {
+      setActiveModuleIndex(0);
     }
   }, [course, activeChapterId]);
 
@@ -114,6 +123,18 @@ export default function CourseDetail() {
     });
   };
 
+  const handleModuleComplete = (moduleIndex) => {
+    setCompletedModules(prev => new Set([...prev, moduleIndex]));
+    // Auto-navigate to next module if available
+    if (course?.modules && moduleIndex < course.modules.length - 1) {
+      setActiveModuleIndex(moduleIndex + 1);
+    }
+  };
+
+  const goToModule = (index) => {
+    setActiveModuleIndex(index);
+  };
+
   if (isLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-gray-900 via-purple-900 to-blue-900">
@@ -145,6 +166,9 @@ export default function CourseDetail() {
   }
 
   const activeChapter = course.chapters?.find((c) => c.id === activeChapterId) || null;
+  const activeModule = course?.modules?.[activeModuleIndex];
+  const hasModules = course?.modules && course.modules.length > 0;
+  const progressPercentage = hasModules ? Math.round((completedModules.size / course.modules.length) * 100) : 0;
 
   return (
     <AuthGuard>
@@ -252,10 +276,165 @@ export default function CourseDetail() {
             </motion.div>
           )}
 
-          {/* Two-column layout */}
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
-            {/* Left: Enhanced Chapter List */}
-            <Card className="lg:col-span-4 border-0 bg-black/20 backdrop-blur-xl shadow-2xl border-purple-500/20">
+          {/* Two-column layout - Module or Chapter based */}
+          {hasModules ? (
+            /* MODULE-BASED VIEW */
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+              {/* Left: Module List */}
+              <Card className="lg:col-span-4 border-0 bg-black/20 backdrop-blur-xl shadow-2xl border-purple-500/20">
+                <CardHeader>
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2">
+                      <BookOpen className="h-5 h-5 text-purple-300" />
+                      <CardTitle className="text-white">Modules</CardTitle>
+                    </div>
+                    {/* Progress bar */}
+                    <div className="space-y-2">
+                      <div className="flex justify-between text-xs text-white/60">
+                        <span>Progress</span>
+                        <span>{completedModules.size} / {course.modules.length}</span>
+                      </div>
+                      <div className="w-full bg-white/10 rounded-full h-2">
+                        <div
+                          className="bg-gradient-to-r from-green-500 to-blue-500 h-2 rounded-full transition-all duration-500"
+                          style={{ width: `${progressPercentage}%` }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  <div className="sticky top-24 space-y-2 max-h-[600px] overflow-y-auto">
+                    {course.modules.map((module, idx) => {
+                      const isActive = idx === activeModuleIndex;
+                      const isCompleted = completedModules.has(idx);
+                      return (
+                        <motion.button
+                          key={idx}
+                          onClick={() => goToModule(idx)}
+                          initial={{ opacity: 0, x: -20 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: idx * 0.05 }}
+                          className={`group flex w-full items-center justify-between rounded-xl border px-4 py-3 text-left transition-all duration-300 ${
+                            isActive
+                              ? 'border-purple-400 bg-purple-500/20 text-purple-100 shadow-lg shadow-purple-500/30'
+                              : 'border-white/10 hover:border-purple-400/50 hover:bg-purple-500/10 text-white/80 hover:text-white'
+                          }`}
+                        >
+                          <span className="flex items-center gap-3 flex-1 min-w-0">
+                            <span className={`flex h-8 w-8 items-center justify-center rounded-lg text-sm font-bold flex-shrink-0 ${
+                              isActive
+                                ? 'bg-gradient-to-br from-purple-500 to-blue-500 text-white shadow-lg shadow-purple-500/50'
+                                : 'bg-white/10 text-white/70 group-hover:bg-purple-500/30 group-hover:text-white'
+                            }`}>
+                              {idx + 1}
+                            </span>
+                            <span className="line-clamp-2 text-sm font-medium">{module.title}</span>
+                          </span>
+                          {isCompleted && (
+                            <CheckCircle2 className="h-5 w-5 text-green-400 flex-shrink-0 ml-2" />
+                          )}
+                        </motion.button>
+                      );
+                    })}
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Right: Module Content */}
+              <div className="lg:col-span-8">
+                <AnimatePresence mode="wait">
+                  {activeModule && (
+                    <motion.div
+                      key={activeModuleIndex}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -20 }}
+                      transition={{ duration: 0.4 }}
+                      className="space-y-6"
+                    >
+                      {/* Module Content Card */}
+                      <Card className="border-0 bg-black/20 backdrop-blur-xl shadow-2xl border-purple-500/20">
+                        <CardHeader>
+                          <CardTitle className="text-2xl text-white bg-gradient-to-r from-white via-purple-200 to-blue-200 bg-clip-text text-transparent">
+                            {activeModule.title}
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-6">
+                          {/* Module Videos */}
+                          {activeModule?.videoUrls && activeModule.videoUrls.length > 0 && (
+                            <div className="space-y-4">
+                              <div className="flex items-center space-x-3">
+                                <Video className="w-6 h-6 text-red-400" />
+                                <h3 className="text-xl font-semibold text-white bg-gradient-to-r from-red-300 to-orange-300 bg-clip-text text-transparent">
+                                  Module Videos ({activeModule.videoUrls.length})
+                                </h3>
+                              </div>
+                              <div className="grid grid-cols-1 gap-4">
+                                {activeModule.videoUrls.map((url, index) => (
+                                  <div key={index} className="relative aspect-video overflow-hidden rounded-xl shadow-2xl border border-purple-400/30 bg-black/50">
+                                    <div className="absolute inset-0 bg-gradient-to-br from-purple-500/10 to-blue-500/10"></div>
+                                    <iframe
+                                      src={url}
+                                      title={`Video ${index + 1}: ${activeModule.title}`}
+                                      className="h-full w-full relative z-10 rounded-xl"
+                                      width="100%"
+                                      height="100%"
+                                      frameBorder="0"
+                                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                                      allowFullScreen
+                                      loading="lazy"
+                                    />
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Module Content */}
+                          <div className="markdown-content bg-white/5 p-6 rounded-xl border border-white/10">
+                            <ReactMarkdown
+                              remarkPlugins={[remarkGfm]}
+                              components={{
+                                h1: ({node, ...props}) => <h1 className="text-3xl font-bold mb-4 text-white bg-gradient-to-r from-purple-300 to-blue-300 bg-clip-text text-transparent" {...props} />,
+                                h2: ({node, ...props}) => <h2 className="text-2xl font-bold mt-8 mb-4 text-white bg-gradient-to-r from-purple-200 to-blue-200 bg-clip-text text-transparent flex items-center gap-2" {...props} />,
+                                h3: ({node, ...props}) => <h3 className="text-xl font-semibold mt-6 mb-3 text-purple-200" {...props} />,
+                                p: ({node, ...props}) => <p className="text-white/80 leading-relaxed mb-4" {...props} />,
+                                ul: ({node, ...props}) => <ul className="list-disc list-inside space-y-2 mb-4 text-white/80" {...props} />,
+                                ol: ({node, ...props}) => <ol className="list-decimal list-inside space-y-2 mb-4 text-white/80" {...props} />,
+                                li: ({node, ...props}) => <li className="ml-4 leading-relaxed" {...props} />,
+                                strong: ({node, ...props}) => <strong className="font-bold text-white" {...props} />,
+                                code: ({node, inline, ...props}) =>
+                                  inline ? (
+                                    <code className="bg-purple-500/20 px-2 py-1 rounded text-purple-200 text-sm" {...props} />
+                                  ) : (
+                                    <code className="block bg-black/30 p-4 rounded-lg text-green-300 text-sm overflow-x-auto my-4 border border-purple-400/30" {...props} />
+                                  ),
+                              }}
+                            >
+                              {activeModule.description}
+                            </ReactMarkdown>
+                          </div>
+                        </CardContent>
+                      </Card>
+
+                      {/* Quiz Section - Show if module has quiz data */}
+                      {activeModule?.quiz && activeModule.quiz.length > 0 && (
+                        <ModuleQuiz
+                          module={activeModule}
+                          onComplete={() => handleModuleComplete(activeModuleIndex)}
+                        />
+                      )}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            </div>
+          ) : (
+            /* CHAPTER-BASED VIEW (Legacy) */
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+              {/* Left: Enhanced Chapter List */}
+              <Card className="lg:col-span-4 border-0 bg-black/20 backdrop-blur-xl shadow-2xl border-purple-500/20">
               <CardHeader className="flex-row items-center justify-between">
                 <div className="flex items-center gap-2">
                   <ListTree className="h-5 w-5 text-purple-300" />
@@ -385,17 +564,42 @@ export default function CourseDetail() {
                         </div>
                       )}
 
-                      {/* Enhanced Description */}
+                      {/* Enhanced Content with Markdown Support */}
                       {activeChapter?.description && (
-                        <div className="prose max-w-none text-white/90">
-                          <p className="text-lg leading-relaxed mb-4 text-white/80 bg-white/5 p-4 rounded-lg border border-white/10">
+                        <div className="markdown-content bg-white/5 p-6 rounded-xl border border-white/10">
+                          <ReactMarkdown
+                            remarkPlugins={[remarkGfm]}
+                            components={{
+                              h1: ({node, ...props}) => <h1 className="text-3xl font-bold mb-4 text-white bg-gradient-to-r from-purple-300 to-blue-300 bg-clip-text text-transparent" {...props} />,
+                              h2: ({node, ...props}) => <h2 className="text-2xl font-bold mt-8 mb-4 text-white bg-gradient-to-r from-purple-200 to-blue-200 bg-clip-text text-transparent flex items-center gap-2" {...props} />,
+                              h3: ({node, ...props}) => <h3 className="text-xl font-semibold mt-6 mb-3 text-purple-200" {...props} />,
+                              h4: ({node, ...props}) => <h4 className="text-lg font-semibold mt-4 mb-2 text-purple-300" {...props} />,
+                              p: ({node, ...props}) => <p className="text-white/80 leading-relaxed mb-4" {...props} />,
+                              ul: ({node, ...props}) => <ul className="list-disc list-inside space-y-2 mb-4 text-white/80" {...props} />,
+                              ol: ({node, ...props}) => <ol className="list-decimal list-inside space-y-2 mb-4 text-white/80" {...props} />,
+                              li: ({node, ...props}) => <li className="ml-4 leading-relaxed" {...props} />,
+                              strong: ({node, ...props}) => <strong className="font-bold text-white" {...props} />,
+                              em: ({node, ...props}) => <em className="italic text-purple-200" {...props} />,
+                              blockquote: ({node, ...props}) => (
+                                <blockquote className="border-l-4 border-purple-400 pl-4 my-4 italic text-white/70 bg-purple-500/10 py-2 rounded-r" {...props} />
+                              ),
+                              code: ({node, inline, ...props}) => 
+                                inline ? (
+                                  <code className="bg-purple-500/20 px-2 py-1 rounded text-purple-200 text-sm" {...props} />
+                                ) : (
+                                  <code className="block bg-black/30 p-4 rounded-lg text-green-300 text-sm overflow-x-auto my-4 border border-purple-400/30" {...props} />
+                                ),
+                              a: ({node, ...props}) => <a className="text-blue-300 hover:text-blue-200 underline" {...props} />,
+                              hr: ({node, ...props}) => <hr className="border-white/20 my-6" {...props} />,
+                            }}
+                          >
                             {activeChapter.description}
-                          </p>
+                          </ReactMarkdown>
                         </div>
                       )}
 
-                      {/* Enhanced Key Points with Hexagonal Layout */}
-                      {activeChapter?.content && (
+                      {/* Fallback for old content format */}
+                      {!activeChapter?.description && activeChapter?.content && (
                         <div className="prose max-w-none text-white/90">
                           <h3 className="text-xl font-semibold mb-6 text-white bg-gradient-to-r from-purple-300 to-blue-300 bg-clip-text text-transparent">
                             Key Points:
@@ -408,7 +612,7 @@ export default function CourseDetail() {
                                   .map((s) => s.trim())
                                   .filter(Boolean);
                             return (
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              <div className="grid grid-cols-1 gap-4">
                                 {points.map((point, idx) => (
                                   <motion.div
                                     key={idx}
@@ -439,6 +643,7 @@ export default function CourseDetail() {
               </AnimatePresence>
             </div>
           </div>
+          )}
         </div>
       </div>
     </AuthGuard>

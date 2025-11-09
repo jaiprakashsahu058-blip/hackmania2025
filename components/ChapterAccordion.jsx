@@ -4,6 +4,8 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronDown, Play, ExternalLink } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 export default function ChapterAccordion({ chapters = [] }) {
   const [expandedChapter, setExpandedChapter] = useState(null);
@@ -73,8 +75,42 @@ export default function ChapterAccordion({ chapters = [] }) {
                 >
                   <CardContent className="px-6 pb-6 pt-0">
                     <div className="space-y-6">
-                      {/* Chapter Content */}
-                      {chapter.content && (
+                      {/* Chapter Content with Markdown Support */}
+                      {chapter.description && (
+                        <div className="bg-white rounded-xl p-6 border border-gray-100 markdown-content">
+                          <ReactMarkdown
+                            remarkPlugins={[remarkGfm]}
+                            components={{
+                              h1: ({node, ...props}) => <h1 className="text-2xl font-bold mb-4 text-gray-900" {...props} />,
+                              h2: ({node, ...props}) => <h2 className="text-xl font-bold mt-6 mb-3 text-gray-800" {...props} />,
+                              h3: ({node, ...props}) => <h3 className="text-lg font-semibold mt-4 mb-2 text-gray-700" {...props} />,
+                              h4: ({node, ...props}) => <h4 className="text-base font-semibold mt-3 mb-2 text-gray-700" {...props} />,
+                              p: ({node, ...props}) => <p className="text-gray-700 leading-relaxed mb-3" {...props} />,
+                              ul: ({node, ...props}) => <ul className="list-disc list-inside space-y-1 mb-3 text-gray-700 ml-4" {...props} />,
+                              ol: ({node, ...props}) => <ol className="list-decimal list-inside space-y-1 mb-3 text-gray-700 ml-4" {...props} />,
+                              li: ({node, ...props}) => <li className="ml-2 leading-relaxed" {...props} />,
+                              strong: ({node, ...props}) => <strong className="font-bold text-gray-900" {...props} />,
+                              em: ({node, ...props}) => <em className="italic text-purple-600" {...props} />,
+                              code: ({node, inline, ...props}) => 
+                                inline ? (
+                                  <code className="bg-purple-100 px-2 py-1 rounded text-purple-800 text-sm" {...props} />
+                                ) : (
+                                  <code className="block bg-gray-100 p-4 rounded-lg text-gray-800 text-sm overflow-x-auto my-3" {...props} />
+                                ),
+                              blockquote: ({node, ...props}) => (
+                                <blockquote className="border-l-4 border-purple-400 pl-4 my-3 italic text-gray-600" {...props} />
+                              ),
+                              a: ({node, ...props}) => <a className="text-blue-600 hover:text-blue-800 underline" {...props} />,
+                              hr: ({node, ...props}) => <hr className="border-gray-300 my-4" {...props} />,
+                            }}
+                          >
+                            {chapter.description}
+                          </ReactMarkdown>
+                        </div>
+                      )}
+                      
+                      {/* Fallback for old content format */}
+                      {!chapter.description && chapter.content && (
                         <div className="bg-white rounded-xl p-6 border border-gray-100">
                           <h2 className="text-xl font-bold mb-2">{chapter.title}</h2>
                           {(() => {

@@ -1,14 +1,35 @@
 import { NextResponse } from 'next/server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { validateAndEnhanceCourse, formatCourseToStructuredJSON } from '@/lib/utils/courseBuilder';
-// import { searchYouTubeCached } from '@/lib/youtube'; // Disabled YouTube integration
+import { generateCompleteCourse as generateGroqCourse } from '@/lib/groq';
+import { auth } from '@clerk/nextjs/server';
 
-// Initialize Gemini AI
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 // Enhanced course generation function with structured output
 async function generateCourseWithAI(topic, category, difficulty, duration, chapterCount, includeVideos = false, includeQuiz = false) {
   console.log('Generating course with AI:', { topic, category, difficulty, duration, chapterCount, includeVideos, includeQuiz });
+  
+  // Try Groq first (fast and free!)
+  if (process.env.GROQ_API_KEY) {
+    console.log('⚡ Using Groq AI - Lightning Fast & Free!');
+    try {
+      const groqCourse = await generateGroqCourse(topic, category, difficulty, includeQuiz, chapterCount);
+      console.log('✅ Groq course generated successfully');
+      console.log(`   📚 Title: ${groqCourse.course_title}`);
+      console.log(`   📖 Modules: ${groqCourse.modules.length} (requested: ${chapterCount})`);
+      if (includeQuiz) {
+        const totalQuizzes = groqCourse.modules.reduce((sum, m) => sum + (m.quiz?.length || 0), 0);
+        console.log(`   🧩 Total Quiz Questions: ${totalQuizzes}`);
+      }
+      return groqCourse;
+    } catch (groqError) {
+      console.error('❌ Groq failed, falling back to Gemini:', groqError.message);
+      // Fall through to Gemini
+    }
+  } else {
+    console.log('⚠️ Groq API key not found, using Gemini AI');
+  }
   
   // Helper function to generate fallback course with enhanced structure
   const generateFallbackCourse = () => {
@@ -51,6 +72,7 @@ async function generateCourseWithAI(topic, category, difficulty, duration, chapt
 ⚡ DIFFICULTY: ${difficulty || 'Beginner'}
 ⏱️ DURATION: ${duration || '3-5 hours'}
 📖 MODULES: ${chapterCount || 5}
+${includeQuiz ? '🧠 INCLUDE QUIZZES: Generate 5 quiz questions per module' : ''}
 
 Generate a JSON response with this EXACT structure:
 {
@@ -63,7 +85,7 @@ Generate a JSON response with this EXACT structure:
     {
       "id": "module-1",
       "title": "Module Title",
-      "description": "Detailed 2-3 paragraph explanation of what this module covers, why it's important, and how it fits into the overall course. Make it engaging and educational.",
+      "description": "Generate comprehensive structured content with EXACT markdown formatting:\n\n## 📚 Introduction\nWrite 100-150 words with a relatable hook, explain importance, and preview outcomes.\n\n## 🎯 Core Concepts\n\n### Concept 1: [Specific Name]\n**What it is:** Clear definition in simple terms\n**Why it matters:** Real-world relevance\n**How it works:** Step-by-step explanation\n**Example:** Detailed real-world example\n\n### Concept 2: [Specific Name]\n**What it is:** Clear definition\n**Why it matters:** Practical application\n**How it works:** Detailed explanation\n**Example:** Concrete example with context\n\n## 💡 Real-World Examples\n- **Example 1:** [Scenario] - Explain application\n- **Example 2:** [Different use case]\n- **Example 3:** [Practical demonstration]\n\n## ✅ Best Practices\n- **Practice 1:** Explanation of why important\n- **Practice 2:** Do's and don'ts\n- **Practice 3:** Practical tip\n- **Practice 4:** Implementation advice\n\n## ⚠ Common Mistakes to Avoid\n- **Mistake 1:** Why it happens and how to avoid\n- **Mistake 2:** Prevention strategy\n- **Mistake 3:** Solution approach\n\n## 🎓 Key Takeaways\n- Key point 1\n- Key point 2\n- Key point 3\n- Key point 4\n- Key point 5",
       "objectives": [
         "Clear learning objective 1",
         "Specific skill or knowledge objective 2",
@@ -71,7 +93,15 @@ Generate a JSON response with this EXACT structure:
         "Assessment or evaluation objective 4"
       ],
       "keywords": ["keyword1", "keyword2", "keyword3"],
-      "videoSearchTerms": "specific search terms for finding relevant YouTube videos"
+      "videoSearchTerms": "specific search terms for finding relevant YouTube videos"${includeQuiz ? `,
+      "quiz": [
+        {
+          "question": "Clear, specific question testing understanding (not just memorization)",
+          "options": ["Plausible option A", "Plausible option B", "Plausible option C", "Plausible option D"],
+          "correct_answer": "Plausible option A",
+          "explanation": "Detailed explanation of why this answer is correct and why others are incorrect"
+        }
+      ]` : ''}
     }
   ]
 }
@@ -80,44 +110,219 @@ Generate a JSON response with this EXACT structure:
 1. **Course Title**: Make it catchy, SEO-friendly, and clearly indicate the subject and level
 2. **Overview**: 2-3 lines explaining the course value proposition
 3. **Modules**: Create exactly ${chapterCount || 5} comprehensive modules
-4. **Module Descriptions**: 2-3 detailed paragraphs explaining:
-   - What the module covers
-   - Why it's important for learning ${topic}
-   - How it connects to other modules
-   - Real-world applications
+4. **Module Content**: ⚠️ CRITICAL - YOU MUST GENERATE COMPLETE CONTENT WITH ALL SECTIONS. DO NOT STOP AFTER JUST THE INTRODUCTION!
+5. **Content Length**: ${chapterCount > 5 ? 'Keep content concise (600-800 words per module) to fit all modules' : 'Generate comprehensive content (800-1200 words per module)'} 
+
+**EXAMPLE OF REQUIRED MARKDOWN FORMAT:**
+
+## 📚 Introduction
+This module introduces you to the core concepts of [topic]. You'll learn the essential principles, understand key terminology, and explore practical applications. By the end of this module, you'll have a solid foundation to build upon in subsequent lessons.
+
+## 🎯 Core Concepts
+
+### Concept 1: [Specific Name]
+**What it is:** Clear definition in simple terms explaining what this concept means.
+**Why it matters:** Real-world relevance and importance of understanding this concept.
+**How it works:** Step-by-step explanation of the underlying mechanics or process.
+**Example:** Detailed real-world example showing this concept in action.
+
+### Concept 2: [Specific Name]  
+**What it is:** Another clear definition with practical context.
+**Why it matters:** Practical applications and use cases.
+**How it works:** Detailed explanation of implementation.
+**Example:** Concrete example with specific details.
+
+## 💡 Real-World Examples
+- **Example 1: [Scenario Name]** - Detailed explanation of how this is applied in a real scenario with specific context.
+- **Example 2: [Different Use Case]** - Another practical application showing versatility.
+- **Example 3: [Industry Application]** - Professional or industry-specific example.
+
+## ✅ Best Practices
+- **Practice 1: [Specific Practice]** - Explanation of why this is important and how to implement it correctly.
+- **Practice 2: [Another Practice]** - Do's and don'ts with practical guidance.
+- **Practice 3: [Third Practice]** - Implementation advice with examples.
+- **Practice 4: [Fourth Practice]** - Additional tips and recommendations.
+
+## ⚠ Common Mistakes to Avoid
+- **Mistake 1: [Common Error]** - Why this happens and how to avoid it with prevention strategies.
+- **Mistake 2: [Another Mistake]** - Warning signs and solutions.
+- **Mistake 3: [Third Mistake]** - Best approaches to prevent this issue.
+
+## 🎓 Key Takeaways
+- Key point 1: Main learning outcome
+- Key point 2: Important concept to remember
+- Key point 3: Practical application
+- Key point 4: Critical understanding
+- Key point 5: Next steps
+
+**NOW GENERATE CONTENT WITH THIS EXACT STRUCTURE FOR EACH MODULE:**
+
+⚠️ **CRITICAL STRUCTURE RULES - APPLY TO ALL DIFFICULTY LEVELS (Beginner/Intermediate/Advanced):**
+   - **SAME FORMAT FOR ALL**: Whether Beginner, Intermediate, or Advanced, use the EXACT SAME structure
+   - **ONLY CONTENT CHANGES**: Difficulty affects complexity of explanations, NOT the format or sections
+   - **ALL 6 SECTIONS REQUIRED**: Every module must have all 6 sections regardless of difficulty/duration
+   - **MUST use markdown headers**: ## 📚 Introduction, ## 🎯 Core Concepts, etc.
+   - **MUST use markdown formatting**: **bold text**, bullet points, numbered lists
+   - **MUST follow the exact template structure** - do not write plain paragraphs
+   - **Content length** (${chapterCount} modules total): 
+     * ${chapterCount > 5 ? 'Concise mode: 600-800 words per module (many chapters)' : 'Standard mode: 800-1200 words per module'}
+   - **Structure sections (SAME FOR ALL LEVELS)**:
+     * Introduction with hook and preview (100-150 words)
+     * Core Concepts with subsections using ### headers (400-500 words)
+     * Real-World Examples with bullet points (200-300 words)
+     * Best Practices with numbered/bulleted list (100-150 words)
+     * Common Mistakes with explanations (100-150 words)
+     * Key Takeaways with bullet points (50-100 words)
 5. **Learning Objectives**: 3-5 specific, measurable learning outcomes using action verbs
 6. **Keywords**: 2-4 relevant terms for video searching
-7. **Video Search Terms**: Specific phrases to find educational YouTube content
+7. **Video Search Terms**: Specific phrases to find educational YouTube content${includeQuiz ? `
+8. **Quiz Questions**: Generate exactly 5 high-quality quiz questions per module:
+   - Questions must test UNDERSTANDING, not just memorization
+   - All 4 options must be plausible and reasonable (avoid obvious wrong answers)
+   - Options should be similar in length and structure
+   - correct_answer must EXACTLY match one of the options (copy the exact text)
+   - Explanations should be detailed and educational (2-3 sentences):
+     * Explain WHY the correct answer is right
+     * Briefly mention why other options are incorrect
+     * Reinforce the learning concept
+   - Mix question types: conceptual, application-based, and scenario-based
+   - Appropriate difficulty for ${difficulty || 'Beginner'} level students
+   - Cover different aspects of the module content` : ''}
 
-🎯 FOCUS AREAS:
-- Make content progressive (beginner to advanced concepts)
+🎯 WRITING STYLE FOR ${difficulty || 'Beginner'} LEVEL:
+${difficulty === 'Beginner' ? `
+- Use everyday language and analogies
+- Avoid technical jargon or explain it immediately
+- Use "you" to make it personal and engaging
+- Include phrases like "Think of it like..." or "Imagine..."
+- Break complex ideas into simple, digestible steps
+- Provide plenty of context and background
+- Use relatable examples from daily life
+` : difficulty === 'Intermediate' ? `
+- Balance technical terms with clear explanations
+- Assume basic knowledge but explain advanced concepts thoroughly
+- Use practical, industry-relevant examples
+- Include some technical details and best practices
+- Reference common tools and methodologies
+- Show connections between concepts
+` : `
+- Use precise technical terminology appropriately
+- Focus on advanced patterns, optimization, and edge cases
+- Include complex scenarios and real-world challenges
+- Assume strong foundational knowledge
+- Discuss trade-offs and decision-making criteria
+- Reference industry standards and advanced techniques
+`}
+
+📋 CONTENT FOCUS AREAS:
+- Make content progressive (fundamentals to advanced concepts)
 - Include practical applications and real-world examples
 - Ensure each module builds upon previous knowledge
-- Use engaging, educational language appropriate for ${difficulty || 'Beginner'} level
-- Structure content for ${duration || '3-5 hours'} of learning
+- Structure content for comprehensive ${duration || '3-5 hours'} of learning
+- Provide actionable insights and takeaways
+${includeQuiz ? `
+📝 QUIZ QUALITY EXAMPLE:
+GOOD Question:
+{
+  "question": "When choosing between a list and a tuple in Python, which scenario would most appropriately require using a tuple?",
+  "options": [
+    "Storing student grades that will be updated frequently throughout the semester",
+    "Storing the RGB color values (255, 128, 0) for a UI element that won't change",
+    "Creating a shopping cart where items can be added or removed",
+    "Maintaining a dynamic queue of tasks to be processed"
+  ],
+  "correct_answer": "Storing the RGB color values (255, 128, 0) for a UI element that won't change",
+  "explanation": "Tuples are immutable, making them perfect for storing fixed data like RGB values that shouldn't change. Lists are better for the other scenarios because they allow modification. This tests understanding of when to use immutable vs mutable data structures, not just definitions."
+}
+
+BAD Question (avoid this):
+{
+  "question": "What is a tuple?",
+  "options": ["A mutable sequence", "An immutable sequence", "A dictionary", "A function"],
+  "correct_answer": "An immutable sequence",
+  "explanation": "A tuple is immutable."
+}
+` : ''}
+
+⚠️⚠️⚠️ FINAL CRITICAL REMINDER ⚠️⚠️⚠️
+
+**THE STRUCTURE BELOW IS MANDATORY FOR ALL COURSES:**
+- ✅ Applies to: Beginner, Intermediate, AND Advanced difficulty
+- ✅ Applies to: 1-2 hours, 3-5 hours, AND 6+ hours duration
+- ✅ Applies to: 3 chapters, 5 chapters, AND 10+ chapters
+- ✅ ONLY the content complexity changes - NEVER the structure!
+
+Each module's "description" field MUST contain ALL 6 sections with complete content:
+1. ## 📚 Introduction (100-150 words) - REQUIRED FOR ALL LEVELS
+2. ## 🎯 Core Concepts (400-500 words with at least 2 concept subsections) - REQUIRED FOR ALL LEVELS
+3. ## 💡 Real-World Examples (200-300 words with at least 3 examples) - REQUIRED FOR ALL LEVELS
+4. ## ✅ Best Practices (100-150 words with at least 4 practices) - REQUIRED FOR ALL LEVELS
+5. ## ⚠ Common Mistakes to Avoid (100-150 words with at least 3 mistakes) - REQUIRED FOR ALL LEVELS
+6. ## 🎓 Key Takeaways (50-100 words with at least 5 points) - REQUIRED FOR ALL LEVELS
+
+**Difficulty Level: ${difficulty || 'Beginner'}** - Adjust CONTENT complexity, NOT structure!
+**Duration: ${duration || '3-5 hours'}** - Affects total depth, NOT section structure!
+**Chapter Count: ${chapterCount || 5}** - Number of modules, NOT their structure!
+
+DO NOT generate only the Introduction section. Generate the COMPLETE content for each module (${chapterCount > 5 ? '600-800' : '800-1200'} words per module).
+
+⚠️ CRITICAL FOR ${chapterCount} MODULES: Keep each module ${chapterCount > 5 ? 'concise but complete' : 'comprehensive'} to stay within response limits!
 
 Return ONLY valid JSON, no additional text or explanations.`;
 
     // Generate content with Gemini
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+    // Configure model with maximum output tokens to prevent JSON truncation
+    const model = genAI.getGenerativeModel({ 
+      model: 'gemini-pro',
+      generationConfig: {
+        maxOutputTokens: 8192,
+        temperature: 0.7,
+      }
+    });
     const result = await model.generateContent(prompt);
     const response = await result.response;
-    const text = response.text();
+    let rawText = response.text();
 
-    console.log('Gemini response:', text);
+    console.log('🤖 Raw Gemini response length:', rawText.length);
+    
+    // Clean up any code block markers and extra text
+    rawText = rawText.replace(/```json|```/g, '').trim();
+    
+    // Remove any text before the first { and after the last }
+    const firstBrace = rawText.indexOf('{');
+    const lastBrace = rawText.lastIndexOf('}');
+    
+    if (firstBrace !== -1 && lastBrace !== -1) {
+      rawText = rawText.substring(firstBrace, lastBrace + 1);
+    }
+
+    console.log('🧹 Cleaned Gemini response:', rawText.substring(0, 500) + '...');
 
     // Parse the JSON response
     let courseData;
     try {
-      // Clean the response text to extract JSON
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        courseData = JSON.parse(jsonMatch[0]);
-      } else {
-        throw new Error('No JSON found in response');
+      courseData = JSON.parse(rawText);
+      console.log('✅ Successfully parsed Gemini JSON response');
+      
+      // Debug: Check if quizzes were generated
+      if (includeQuiz) {
+        const quizCount = courseData.modules?.reduce((sum, m) => sum + (m.quiz?.length || 0), 0) || 0;
+        console.log(`🧩 Total quizzes generated: ${quizCount}`);
+        
+        if (quizCount === 0) {
+          console.warn('⚠️ No quizzes found in Gemini response despite includeQuiz=true');
+        } else {
+          console.log('📝 Quiz generation successful!');
+          courseData.modules.forEach((module, index) => {
+            if (module.quiz && module.quiz.length > 0) {
+              console.log(`   Module ${index + 1} (${module.title}): ${module.quiz.length} questions`);
+            }
+          });
+        }
       }
     } catch (parseError) {
-      console.error('Failed to parse Gemini response:', text);
+      console.error('Failed to parse Gemini response:', parseError.message);
+      console.error('Raw response preview:', rawText.substring(0, 500));
       console.log('Falling back to fallback response due to parsing error');
       return generateFallbackCourse();
     }
@@ -202,6 +407,17 @@ async function searchYouTubeVideoIds(query, apiKey, max = 3) {
     return ids;
   } catch (e) {
     return [];
+  }
+}
+
+// Search YouTube and return single video ID (cached wrapper)
+async function searchYouTubeCached(query, apiKey) {
+  try {
+    const videoIds = await searchYouTubeVideoIds(query, apiKey, 1);
+    return videoIds.length > 0 ? videoIds[0] : null;
+  } catch (e) {
+    console.error('Error in searchYouTubeCached:', e);
+    return null;
   }
 }
 
@@ -921,26 +1137,64 @@ export async function POST(request) {
       topic, 
       category = 'General',
       difficulty = 'Beginner',
-      duration = '3-5 hours',
-      chapterCount = 5,
-      includeVideos = true,
+      duration,
+      chapterCount: rawChapterCount = 5,
+      includeVideos = false,
       includeQuiz = false 
     } = await request.json();
+    
+    // Duration is only relevant when videos are included
+    const finalDuration = includeVideos && duration ? duration : 'Not specified';
+
+    // Parse chapterCount: '6-8' -> 6, '3-5' -> 3, or use number directly
+    let chapterCount = 5;
+    let requestedCount = 5;
+    
+    if (typeof rawChapterCount === 'string') {
+      const match = rawChapterCount.match(/^\d+/);
+      requestedCount = match ? parseInt(match[0]) : 5;
+    } else {
+      requestedCount = parseInt(rawChapterCount) || 5;
+    }
+    
+    // Token limit configuration (prevents JSON truncation)
+    const TOKEN_SAFE_LIMITS = {
+      max_chapters: 8,
+      words_per_chapter: {
+        '1-5': 1000,   // Comprehensive content
+        '6-8': 700,    // Concise but complete
+        '9+': 500      // Very concise (safety limit)
+      }
+    };
+    
+    // Auto-limit to safe maximum
+    chapterCount = Math.min(requestedCount, TOKEN_SAFE_LIMITS.max_chapters);
+    
+    // Log if we're auto-limiting
+    if (chapterCount < requestedCount) {
+      console.log(`⚠️ Auto-limited chapters: ${requestedCount} requested → ${chapterCount} (token limit)`);
+    }
 
     if (!topic) {
       return NextResponse.json({ error: 'Topic is required' }, { status: 400 });
     }
 
-    console.log('Generating course with parameters:', { 
-      topic, category, difficulty, duration, chapterCount, includeVideos, includeQuiz 
+    console.log('Generating course with AI:', { 
+      topic, 
+      category, 
+      difficulty, 
+      duration: finalDuration,
+      chapterCount, 
+      includeVideos, 
+      includeQuiz 
     });
 
-    // Generate course using AI
+    // Generate course using AI (use finalDuration for consistency)
     const generatedCourse = await generateCourseWithAI(
       topic, 
       category, 
       difficulty, 
-      duration, 
+      finalDuration, 
       chapterCount, 
       includeVideos, 
       includeQuiz
@@ -948,6 +1202,7 @@ export async function POST(request) {
 
     // Enhanced YouTube video search using keywords and search terms
     if (includeVideos && Array.isArray(generatedCourse.modules)) {
+      console.log('🎥 YouTube video integration requested for', generatedCourse.modules.length, 'modules');
       const apiKey = process.env.YOUTUBE_API_KEY;
       const rateLimited = (arr, size = 3) => {
         // Smaller chunks to avoid rate limits
@@ -957,7 +1212,7 @@ export async function POST(request) {
       };
 
       if (apiKey) {
-        console.log('Searching for YouTube videos using enhanced search terms...');
+        console.log('✅ YouTube API key found, searching for videos...');
         const moduleChunks = rateLimited(generatedCourse.modules, 3);
         
         for (const chunk of moduleChunks) {
@@ -965,6 +1220,7 @@ export async function POST(request) {
           const results = await Promise.all(
             chunk.map(async (module) => {
               try {
+                console.log(`🔍 Searching videos for module: ${module.title}`);
                 // Use multiple search strategies for better results
                 const searchQueries = [
                   module.videoSearchTerms || `${topic} ${module.title}`,
@@ -972,15 +1228,25 @@ export async function POST(request) {
                   `learn ${topic} ${module.title.split(':')[1] || module.title}`
                 ].filter(Boolean);
 
+                console.log(`📝 Search queries for "${module.title}":`, searchQueries);
                 let allVideoIds = [];
                 
                 // Try each search query to get diverse results
                 for (const query of searchQueries.slice(0, 2)) { // Limit to 2 queries per module
-                  const ids = await searchYouTubeVideoIds(query.trim(), apiKey, 2);
-                  allVideoIds = [...allVideoIds, ...ids];
-                  
-                  // Small delay to respect rate limits
-                  await new Promise(resolve => setTimeout(resolve, 100));
+                  try {
+                    console.log(`🔎 Searching YouTube for: "${query}"`);
+                    const videoId = await searchYouTubeCached(query.trim(), apiKey);
+                    if (videoId) {
+                      console.log(`✅ Found video ID: ${videoId} for query: "${query}"`);
+                      allVideoIds.push(videoId);
+                    } else {
+                      console.log(`❌ No video found for query: "${query}"`);
+                    }
+                    // Small delay to respect rate limits
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                  } catch (error) {
+                    console.warn(`❌ Failed to search for: ${query}`, error);
+                  }
                 }
 
                 // Remove duplicates and limit to 3 videos per module
@@ -998,69 +1264,141 @@ export async function POST(request) {
           // Assign video URLs back to modules
           results.forEach(({ module, embedUrls }) => {
             if (embedUrls.length > 0) {
-              module.videoUrls = embedUrls;
-              console.log(`Found ${embedUrls.length} videos for module: ${module.title}`);
+              // Convert embed URL back to watch URL for frontend compatibility
+              const firstVideoId = embedUrls[0].split('/').pop();
+              module.videoUrl = `https://www.youtube.com/watch?v=${firstVideoId}`;
+              module.videoUrls = embedUrls; // Keep array for potential future use
+              console.log(`✅ Found ${embedUrls.length} videos for module: ${module.title}, using: ${module.videoUrl}`);
             } else {
-              console.log(`No videos found for module: ${module.title}`);
+              console.log(`❌ No videos found for module: ${module.title}`);
             }
           });
           
           // Delay between chunks to respect API rate limits
           await new Promise(resolve => setTimeout(resolve, 500));
         }
+        
+        // Log summary of video integration
+        const modulesWithVideos = generatedCourse.modules.filter(m => m.videoUrl);
+        console.log(`🎥 YouTube Integration Summary: ${modulesWithVideos.length}/${generatedCourse.modules.length} modules have videos`);
+        modulesWithVideos.forEach(m => console.log(`   ✅ ${m.title}: ${m.videoUrl}`));
+        
       } else {
-        console.log('YouTube API key not found, skipping video search');
+        console.log('❌ YouTube API key not found, skipping video search');
+        console.log('   Add YOUTUBE_API_KEY to your environment variables to enable video integration');
       }
+    } else if (includeVideos) {
+      console.log('❌ No modules found for video integration');
     }
 
-    // Generate quizzes if requested
+    // Extract quiz data from Gemini-generated modules
     let quizzes = [];
-    if (includeQuiz && generatedCourse.chapters) {
-      quizzes = generatedCourse.chapters.map(chapter => ({
-        chapterId: chapter.id,
-        chapterTitle: chapter.title,
-        questions: generateQuizQuestions(chapter.title, chapter.points, difficulty)
-      }));
+    if (includeQuiz && generatedCourse.modules) {
+      quizzes = generatedCourse.modules
+        .filter(module => module.quiz && module.quiz.length > 0)
+        .map(module => ({
+          chapterId: module.id,
+          chapterTitle: module.title,
+          questions: module.quiz.map(q => ({
+            question: q.question,
+            options: q.options,
+            correctAnswer: q.correct_answer,
+            explanation: q.explanation
+          }))
+        }));
+      console.log(`📝 Generated ${quizzes.length} quizzes from Gemini AI`);
     }
 
-    // Convert enhanced structure back to compatible format for database storage
+    // Convert to new JSONB structure for database storage
     const compatibleCourse = {
-      title: generatedCourse.course_title || generatedCourse.title,
+      course_title: generatedCourse.course_title || generatedCourse.title || `${topic} Course`,
       description: generatedCourse.overview || `Learn ${topic} with this comprehensive course.`,
       category: generatedCourse.category || category || 'General',
       difficulty: generatedCourse.difficulty || difficulty || 'Beginner',
-      duration: generatedCourse.duration || duration || '3-5 hours',
+      duration: generatedCourse.duration || finalDuration,
       topic,
-      chapterCount: generatedCourse.modules?.length || generatedCourse.chapters?.length || 0,
+      modules: generatedCourse.modules || [], // Store complete modules as JSONB
+      include_quiz: includeQuiz,
+      include_videos: includeVideos,
       id: 'generated-' + Date.now(),
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       
-      // Convert modules to chapters for database compatibility
+      // Legacy format for backward compatibility (if needed)
       chapters: (generatedCourse.modules || generatedCourse.chapters || []).map((module, index) => ({
         id: module.id || `chapter-${index + 1}`,
         title: module.title,
         description: module.description,
+        content: module.description,
         points: module.objectives || module.points || [],
         keywords: module.keywords || [],
         videoSearchTerms: module.videoSearchTerms || '',
+        videoUrl: module.videoUrl || null,
         videoUrls: module.videoUrls || [],
+        quiz: module.quiz || [],
         orderIndex: index + 1
       })),
       
-      // Include enhanced metadata
-      enhancedStructure: {
-        course_title: generatedCourse.course_title,
-        overview: generatedCourse.overview,
-        modules: generatedCourse.modules
-      },
-      
+      // Quiz data for separate tracking (if using normalized table)
       quizzes: includeQuiz ? quizzes : undefined
     };
 
-    return NextResponse.json({ 
-      course: compatibleCourse
+    // Debug: Log what we're returning
+    console.log('🚀 Returning course data:', {
+      hasModules: !!compatibleCourse.modules,
+      modulesCount: compatibleCourse.modules?.length || 0,
+      hasChapters: !!compatibleCourse.chapters,
+      chaptersCount: compatibleCourse.chapters?.length || 0,
+      includeQuiz: compatibleCourse.include_quiz,
+      modulesSample: compatibleCourse.modules?.[0] ? {
+        title: compatibleCourse.modules[0].title,
+        hasQuiz: !!compatibleCourse.modules[0].quiz,
+        quizLength: compatibleCourse.modules[0].quiz?.length || 0,
+        quizKeys: compatibleCourse.modules[0].quiz ? Object.keys(compatibleCourse.modules[0].quiz) : [],
+        rawQuizData: compatibleCourse.modules[0].quiz
+      } : null,
+      chaptersSample: compatibleCourse.chapters?.[0] ? {
+        title: compatibleCourse.chapters[0].title,
+        hasQuiz: !!compatibleCourse.chapters[0].quiz,
+        quizLength: compatibleCourse.chapters[0].quiz?.length || 0
+      } : null
     });
+
+    // Debug: Log raw generated course modules
+    if (generatedCourse.modules && generatedCourse.modules[0]) {
+      console.log('🔍 Raw Gemini module sample:', {
+        title: generatedCourse.modules[0].title,
+        hasQuiz: !!generatedCourse.modules[0].quiz,
+        quizLength: generatedCourse.modules[0].quiz?.length || 0
+      });
+      
+      // Show actual quiz question to verify prompt quality
+      if (generatedCourse.modules[0].quiz && generatedCourse.modules[0].quiz[0]) {
+        console.log('📝 Sample Quiz Question (to verify prompt quality):');
+        console.log('   Q:', generatedCourse.modules[0].quiz[0].question);
+        console.log('   Options:', generatedCourse.modules[0].quiz[0].options);
+        console.log('   Correct:', generatedCourse.modules[0].quiz[0].correct_answer);
+        console.log('   Explanation:', generatedCourse.modules[0].quiz[0].explanation);
+      }
+    }
+
+    // Build response with optional warning
+    const response = { 
+      course: compatibleCourse  // Frontend expects 'course' key
+    };
+    
+    // Add warning if chapters were auto-limited
+    if (chapterCount < requestedCount) {
+      response.warning = {
+        type: 'auto_limited',
+        message: `Chapters auto-limited from ${requestedCount} to ${chapterCount} to prevent content truncation`,
+        requested: requestedCount,
+        generated: chapterCount,
+        reason: 'Token limit safety - ensures complete structured content for all modules'
+      };
+    }
+    
+    return NextResponse.json(response);
   } catch (error) {
     console.error('Error generating course:', error);
     return NextResponse.json({ 

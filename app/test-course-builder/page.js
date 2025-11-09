@@ -58,8 +58,11 @@ export default function TestCourseBuilder() {
           <Card className="mb-6 border-0 bg-black/20 backdrop-blur-xl shadow-2xl border-purple-500/20">
             <CardHeader>
               <CardTitle className="text-2xl text-white bg-gradient-to-r from-white via-purple-200 to-blue-200 bg-clip-text text-transparent">
-                🎓 AI Course Builder Test
+                🎓 OpenRouter AI Course Builder Test
               </CardTitle>
+              <p className="text-purple-200 text-sm">
+                Testing 3 specialized models: GPT-3.5 (Syllabus) + LongCat (Content) + GPT-OSS (Quiz)
+              </p>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex gap-4">
@@ -134,6 +137,40 @@ export default function TestCourseBuilder() {
                           </div>
                         )}
                         
+                        {/* Quiz Questions */}
+                        {module.quiz && module.quiz.length > 0 && (
+                          <div className="mb-4">
+                            <h5 className="text-md font-medium text-white mb-2">
+                              📝 Quiz Questions ({module.quiz.length}):
+                            </h5>
+                            <div className="space-y-3">
+                              {module.quiz.map((question, qIndex) => (
+                                <div key={qIndex} className="p-3 bg-green-500/20 rounded border border-green-400/30">
+                                  <p className="text-white font-medium mb-2">
+                                    Q{qIndex + 1}: {question.question}
+                                  </p>
+                                  <div className="space-y-1 mb-2">
+                                    {question.options?.map((option, optIndex) => (
+                                      <div key={optIndex} className={`p-2 rounded text-sm ${
+                                        question.correct_answer === option || question.correctAnswer === optIndex
+                                          ? 'bg-green-600/30 text-green-200 border border-green-500/50'
+                                          : 'bg-white/10 text-white/70'
+                                      }`}>
+                                        {String.fromCharCode(65 + optIndex)}. {option}
+                                      </div>
+                                    ))}
+                                  </div>
+                                  {question.explanation && (
+                                    <p className="text-green-200 text-xs italic">
+                                      💡 {question.explanation}
+                                    </p>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
                         {/* Videos */}
                         {module.videos && module.videos.length > 0 && (
                           <div>

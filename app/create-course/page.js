@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, Code, Heart, Palette, BookOpen, Brain, Zap, Clock, ChevronRight, Sparkles, Video, X } from 'lucide-react';
@@ -15,6 +15,8 @@ export default function CreateCourse() {
   const router = useRouter();
   const [currentStep, setCurrentStep] = useState(1);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isBackgroundGeneration, setIsBackgroundGeneration] = useState(false);
+  const abortControllerRef = useRef(null);
   const [courseData, setCourseData] = useState({
     category: '',
     topic: '',
@@ -52,8 +54,31 @@ export default function CreateCourse() {
     }
   };
 
+  const handleCancel = () => {
+    // Abort the fetch request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    setIsGenerating(false);
+    setIsBackgroundGeneration(false);
+    alert('Course generation cancelled');
+  };
+
+  const handleBackground = () => {
+    // Hide modal but continue generation
+    setIsGenerating(false);
+    setIsBackgroundGeneration(true);
+    // Show a toast or notification
+    alert('Course is generating in the background. You will be redirected when complete.');
+  };
+
   const handleGenerateCourse = async () => {
     setIsGenerating(true);
+    setIsBackgroundGeneration(false);
+    
+    // Create new AbortController for this request
+    abortControllerRef.current = new AbortController();
     
     try {
       console.log('Starting course generation with data:', courseData);
@@ -64,6 +89,7 @@ export default function CreateCourse() {
         headers: {
           'Content-Type': 'application/json',
         },
+        signal: abortControllerRef.current.signal,
         body: JSON.stringify({
           topic: courseData.topic,
           category: courseData.category,
@@ -88,11 +114,31 @@ export default function CreateCourse() {
       const responseData = await response.json();
       console.log('Generated course data:', responseData);
       
-      const { course: generatedCourse } = responseData;
+      const { course: generatedCourse, warning } = responseData;
 
       if (!generatedCourse) {
         throw new Error('No course data received from API');
       }
+      
+      // Show warning if chapters were auto-limited
+      if (warning && warning.type === 'auto_limited') {
+        console.warn(`⚠️ ${warning.message}`);
+        alert(`ℹ️ Note: ${warning.message}\n\nThis ensures all modules have complete, structured content.`);
+      }
+
+      // Debug: Check what's in the generated course
+      console.log('🔍 Generated course structure:', {
+        hasModules: !!generatedCourse.modules,
+        modulesCount: generatedCourse.modules?.length || 0,
+        hasChapters: !!generatedCourse.chapters,
+        chaptersCount: generatedCourse.chapters?.length || 0,
+        includeQuiz: generatedCourse.include_quiz,
+        modulesSample: generatedCourse.modules?.[0] ? {
+          title: generatedCourse.modules[0].title,
+          hasQuiz: !!generatedCourse.modules[0].quiz,
+          quizLength: generatedCourse.modules[0].quiz?.length || 0
+        } : null
+      });
 
       // Save course to database
       const saveResponse = await fetch('/api/courses', {
@@ -101,17 +147,21 @@ export default function CreateCourse() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          title: generatedCourse.title || generatedCourse.courseTitle || courseData.topic,
-          description: generatedCourse.description || generatedCourse.courseDescription || (courseData.description || `Learn ${courseData.topic} with this comprehensive course.`),
-          category: courseData.category,
-          difficulty: courseData.difficulty,
-          duration: courseData.duration,
-          chapterCount: Array.isArray(generatedCourse.chapters) ? generatedCourse.chapters.length : 5,
-          includeVideos: courseData.includeVideos,
+          title: generatedCourse.title || generatedCourse.course_title || courseData.topic,
+          course_title: generatedCourse.course_title || generatedCourse.title || courseData.topic,
+          description: generatedCourse.description || generatedCourse.overview || (courseData.description || `Learn ${courseData.topic} with this comprehensive course.`),
+          category: generatedCourse.category || courseData.category,
+          difficulty: generatedCourse.difficulty || courseData.difficulty,
+          duration: generatedCourse.duration || courseData.duration,
+          modules: generatedCourse.modules || [], // New JSONB structure
+          include_quiz: generatedCourse.include_quiz || courseData.includeQuiz || false,
+          include_videos: generatedCourse.include_videos || courseData.includeVideos || false,
+          includeQuiz: courseData.includeQuiz, // Legacy field
+          includeVideos: courseData.includeVideos, // Legacy field
           preferredLanguage: courseData.preferredLanguage,
-          topic: courseData.topic,
-          generatedChapters: generatedCourse.chapters || [],
-          quizzes: generatedCourse.quizzes
+          topic: generatedCourse.topic || courseData.topic,
+          generatedChapters: generatedCourse.chapters || [], // Legacy chapters
+          quizzes: generatedCourse.quizzes || []
         }),
       });
 
@@ -131,6 +181,12 @@ export default function CreateCourse() {
       router.push(`/course/${savedCourse.id}`);
       
     } catch (error) {
+      // Check if error is due to abort
+      if (error.name === 'AbortError') {
+        console.log('Course generation was cancelled');
+        return;
+      }
+      
       console.error('Error generating course:', error);
       // Show a more user-friendly error message
       const errorMessage = error.message.includes('Failed to generate course') 
@@ -142,11 +198,19 @@ export default function CreateCourse() {
       alert(`Failed to generate course: ${errorMessage}`);
     } finally {
       setIsGenerating(false);
+      setIsBackgroundGeneration(false);
+      abortControllerRef.current = null;
     }
   };
 
   const updateCourseData = (field, value) => {
-    setCourseData(prev => ({ ...prev, [field]: value }));
+    setCourseData(prev => {
+      // If unchecking videos, also clear duration since it's no longer relevant
+      if (field === 'includeVideos' && value === false) {
+        return { ...prev, [field]: value, duration: '' };
+      }
+      return { ...prev, [field]: value };
+    });
   };
 
 
@@ -554,66 +618,74 @@ export default function CreateCourse() {
             </Select>
           </motion.div>
           
-          <motion.div 
-            className="bg-gradient-to-br from-black/30 via-blue-900/20 to-cyan-900/20 backdrop-blur-xl rounded-3xl p-8 border border-blue-500/40 shadow-2xl relative overflow-hidden group hover:shadow-blue-500/25 transition-all duration-500"
-            initial={{ opacity: 0, x: 50, scale: 0.9 }}
-            animate={{ opacity: 1, x: 0, scale: 1 }}
-            transition={{ delay: 0.4, duration: 0.6, ease: "easeOut" }}
-            whileHover={{ scale: 1.02, y: -5 }}
-          >
-            {/* Animated background gradient */}
-            <div className="absolute inset-0 bg-gradient-to-r from-blue-600/5 via-cyan-600/5 to-purple-600/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
-            
-            {/* Floating icon */}
+          {/* Course Duration - Only shown when videos are included */}
+          {courseData.includeVideos && (
             <motion.div 
-              className="absolute top-4 right-4 w-8 h-8 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-full flex items-center justify-center opacity-20"
-              animate={{ 
-                rotate: [0, -360],
-                scale: [1, 1.2, 1]
-              }}
-              transition={{ 
-                rotate: { duration: 8, repeat: Infinity, ease: "linear" },
-                scale: { duration: 3, repeat: Infinity }
-              }}
+              className="bg-gradient-to-br from-black/30 via-blue-900/20 to-cyan-900/20 backdrop-blur-xl rounded-3xl p-8 border border-blue-500/40 shadow-2xl relative overflow-hidden group hover:shadow-blue-500/25 transition-all duration-500"
+              initial={{ opacity: 0, y: 50, scale: 0.9 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -20, scale: 0.9 }}
+              transition={{ delay: 0.4, duration: 0.6, ease: "easeOut" }}
+              whileHover={{ scale: 1.02, y: -5 }}
             >
-              <span className="text-white text-xs">⏱️</span>
-            </motion.div>
-            
-            <motion.label 
-              className="block text-xl font-bold mb-4 text-white bg-gradient-to-r from-white to-blue-200 bg-clip-text text-transparent relative z-10"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.6, duration: 0.6 }}
-            >
-              Course Duration
-            </motion.label>
-            
-            <Select value={courseData.duration} onValueChange={(value) => updateCourseData('duration', value)}>
-              <SelectTrigger className="h-18 text-lg rounded-2xl border-2 border-white/30 bg-gradient-to-r from-white/15 via-blue-500/10 to-cyan-500/10 backdrop-blur-xl text-white placeholder:text-white/60 focus:border-blue-400/80 focus:ring-blue-400/40 hover:border-white/50 hover:bg-gradient-to-r hover:from-white/20 hover:via-blue-500/15 hover:to-cyan-500/15 transition-all duration-300 shadow-xl hover:shadow-blue-500/30 [&>span]:text-white relative z-10 group">
-                <SelectValue placeholder="Select duration" />
-                <motion.div
-                  className="absolute right-4 top-1/2 transform -translate-y-1/2"
-                  animate={{ rotate: [0, 180, 0] }}
-                  transition={{ duration: 0.3 }}
-                >
-                  <svg className="w-5 h-5 text-white/70 group-hover:text-white transition-colors duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
-                </motion.div>
-              </SelectTrigger>
-              <SelectContent className="bg-gradient-to-br from-black/95 via-blue-900/90 to-cyan-900/90 backdrop-blur-xl border border-white/30 text-white rounded-2xl shadow-2xl p-2">
-                {durations.map((dur, index) => (
-                  <SelectItem 
-                    key={dur} 
-                    value={dur} 
-                    className="text-white hover:bg-gradient-to-r hover:from-blue-500/30 hover:to-cyan-500/30 focus:bg-gradient-to-r focus:from-blue-500/30 focus:to-cyan-500/30 transition-all duration-200 rounded-xl m-1 p-3 cursor-pointer"
+              {/* Animated background gradient */}
+              <div className="absolute inset-0 bg-gradient-to-r from-blue-600/5 via-cyan-600/5 to-purple-600/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+              
+              {/* Floating icon */}
+              <motion.div 
+                className="absolute top-4 right-4 w-8 h-8 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-full flex items-center justify-center opacity-20"
+                animate={{ 
+                  rotate: [0, -360],
+                  scale: [1, 1.2, 1]
+                }}
+                transition={{ 
+                  rotate: { duration: 8, repeat: Infinity, ease: "linear" },
+                  scale: { duration: 3, repeat: Infinity }
+                }}
+              >
+                <span className="text-white text-xs">⏱️</span>
+              </motion.div>
+              
+              <motion.label 
+                className="block text-xl font-bold mb-2 text-white bg-gradient-to-r from-white to-blue-200 bg-clip-text text-transparent relative z-10"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.6, duration: 0.6 }}
+              >
+                Course Duration (Video Watch Time)
+              </motion.label>
+              
+              <p className="text-white/60 text-sm mb-4 relative z-10">
+                📹 Estimated time including video content
+              </p>
+              
+              <Select value={courseData.duration} onValueChange={(value) => updateCourseData('duration', value)}>
+                <SelectTrigger className="h-18 text-lg rounded-2xl border-2 border-white/30 bg-gradient-to-r from-white/15 via-blue-500/10 to-cyan-500/10 backdrop-blur-xl text-white placeholder:text-white/60 focus:border-blue-400/80 focus:ring-blue-400/40 hover:border-white/50 hover:bg-gradient-to-r hover:from-white/20 hover:via-blue-500/15 hover:to-cyan-500/15 transition-all duration-300 shadow-xl hover:shadow-blue-500/30 [&>span]:text-white relative z-10 group">
+                  <SelectValue placeholder="Select duration" />
+                  <motion.div
+                    className="absolute right-4 top-1/2 transform -translate-y-1/2"
+                    animate={{ rotate: [0, 180, 0] }}
+                    transition={{ duration: 0.3 }}
                   >
-                    <span className="font-medium">{dur}</span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </motion.div>
+                    <svg className="w-5 h-5 text-white/70 group-hover:text-white transition-colors duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </motion.div>
+                </SelectTrigger>
+                <SelectContent className="bg-gradient-to-br from-black/95 via-blue-900/90 to-cyan-900/90 backdrop-blur-xl border border-white/30 text-white rounded-2xl shadow-2xl p-2">
+                  {durations.map((dur, index) => (
+                    <SelectItem 
+                      key={dur} 
+                      value={dur} 
+                      className="text-white hover:bg-gradient-to-r hover:from-blue-500/30 hover:to-cyan-500/30 focus:bg-gradient-to-r focus:from-blue-500/30 focus:to-cyan-500/30 transition-all duration-200 rounded-xl m-1 p-3 cursor-pointer"
+                    >
+                      <span className="font-medium">{dur}</span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </motion.div>
+          )}
         </div>
         
         <motion.div 
@@ -851,7 +923,9 @@ export default function CreateCourse() {
       case 2:
         return courseData.topic.trim();
       case 3:
-        return courseData.difficulty && courseData.duration && courseData.chapterCount;
+        // Duration only required when videos are included
+        const needsDuration = courseData.includeVideos ? courseData.duration : true;
+        return courseData.difficulty && needsDuration && courseData.chapterCount;
       default:
         return false;
     }
@@ -866,6 +940,26 @@ export default function CreateCourse() {
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-purple-500/20 via-transparent to-blue-500/20"></div>
         <div className="absolute inset-0 bg-[conic-gradient(from_0deg_at_50%_50%,_transparent_0deg,_purple-500/10_60deg,_transparent_120deg,_blue-500/10_180deg,_transparent_240deg,_purple-500/10_300deg,_transparent_360deg)] animate-spin [animation-duration:20s]"></div>
         
+        {/* Background Generation Indicator */}
+        {isBackgroundGeneration && (
+          <motion.div
+            initial={{ y: -100, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            className="fixed top-4 right-4 z-50 bg-gradient-to-r from-purple-600 to-blue-600 text-white px-6 py-3 rounded-xl shadow-2xl flex items-center gap-3"
+          >
+            <motion.div
+              animate={{ rotate: 360 }}
+              transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+            >
+              <Brain className="w-5 h-5" />
+            </motion.div>
+            <div>
+              <div className="font-semibold">Generating Course...</div>
+              <div className="text-xs opacity-90">You'll be redirected when complete</div>
+            </div>
+          </motion.div>
+        )}
+
         {/* Header with Enhanced Glass Effect */}
         <div className="bg-black/20 backdrop-blur-2xl border-b border-purple-500/30 shadow-2xl relative z-10">
           <div className="max-w-5xl mx-auto px-6 py-6">
@@ -989,6 +1083,8 @@ export default function CreateCourse() {
         <LoadingModal 
           isOpen={isGenerating} 
           onOpenChange={setIsGenerating}
+          onCancel={handleCancel}
+          onBackground={handleBackground}
         />
       </div>
     </AuthGuard>

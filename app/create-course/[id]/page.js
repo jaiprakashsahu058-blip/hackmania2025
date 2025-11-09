@@ -8,7 +8,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import AuthGuard from '@/components/AuthGuard';
-import BilingualYouTubeEmbed from '@/components/BilingualYouTubeEmbed';
+import SimpleYouTubeEmbed from '@/components/SimpleYouTubeEmbed';
+import StructuredQuizSection from '@/components/StructuredQuizSection';
+import ModuleQuizSection from '@/components/ModuleQuizSection';
 
 export default function CourseLayout() {
   const { id } = useParams();
@@ -30,56 +32,64 @@ export default function CourseLayout() {
         title: 'Introduction to JavaScript',
         description: 'Learn what JavaScript is and why it\'s important for web development',
         duration: '15 minutes',
-        content: ''
+        videoUrl: 'https://www.youtube.com/watch?v=W6NZfCO5SIk',
+        content: 'JavaScript is a high-level, interpreted programming language that is one of the core technologies of the World Wide Web. It enables interactive web pages and is an essential part of web applications. JavaScript is a prototype-based, multi-paradigm, single-threaded, dynamic language, supporting object-oriented, imperative, and declarative programming styles. JavaScript was initially created to make web pages alive. The programs in this language are called scripts. They can be written right in a web page\'s HTML and run automatically as the page loads.'
       },
       {
         id: 2,
         title: 'Variables and Data Types',
         description: 'Understanding variables, strings, numbers, and other data types',
         duration: '25 minutes',
-        content: ''
+        videoUrl: 'https://www.youtube.com/watch?v=9emXNzqCKyg',
+        content: 'Variables in JavaScript are containers for storing data values. JavaScript has several data types including primitive types like numbers, strings, booleans, undefined, null, and symbols, as well as non-primitive types like objects and arrays. Variables can be declared using var, let, or const keywords. The let and const keywords were introduced in ES6 and provide block scope, while var provides function scope. Numbers in JavaScript can be integers or floating-point values. Strings are sequences of characters enclosed in quotes. Booleans represent true or false values.'
       },
       {
         id: 3,
         title: 'Functions and Scope',
         description: 'Creating and using functions, understanding scope and closures',
         duration: '30 minutes',
-        content: ''
+        videoUrl: 'https://www.youtube.com/watch?v=N8ap4k_1QEQ',
+        content: 'Functions are reusable blocks of code designed to perform a particular task. They are executed when called or invoked. JavaScript functions can be declared using function declarations, function expressions, or arrow functions. Scope determines the accessibility of variables. JavaScript has global scope, function scope, and block scope. Closures are functions that have access to variables from an outer scope even after the outer function has returned. This is a powerful feature that enables data privacy and function factories.'
       },
       {
         id: 4,
         title: 'Arrays and Objects',
         description: 'Working with arrays, objects, and common array methods',
         duration: '35 minutes',
-        content: ''
+        videoUrl: 'https://www.youtube.com/watch?v=R8rmfD9Y5-c',
+        content: 'Arrays are ordered lists of values, indexed by numbers starting from 0. They can store multiple values in a single variable and provide methods like push, pop, shift, unshift, slice, splice, and many others. Objects are collections of key-value pairs, where keys are strings and values can be any data type. Objects can be created using object literals, constructor functions, or the Object.create method. Both arrays and objects are reference types in JavaScript, meaning variables store references to the actual data rather than the data itself.'
       },
       {
         id: 5,
         title: 'DOM Manipulation',
         description: 'Interacting with HTML elements using JavaScript',
         duration: '40 minutes',
-        content: ''
+        videoUrl: 'https://www.youtube.com/watch?v=5fb2aPlgoys',
+        content: 'The Document Object Model (DOM) is a programming interface for web documents. It represents the page so that programs can change the document structure, style, and content. JavaScript can access and manipulate DOM elements using methods like getElementById, querySelector, createElement, appendChild, and many others. You can change element content, attributes, styles, and respond to user interactions. DOM manipulation is essential for creating dynamic and interactive web pages.'
       },
       {
         id: 6,
         title: 'Events and Event Handling',
         description: 'Responding to user interactions and browser events',
         duration: '30 minutes',
-        content: ''
+        videoUrl: 'https://www.youtube.com/watch?v=XF1_MlZ5l6M',
+        content: 'Events are actions that can be triggered by user interactions or browser actions. Common events include click, mouseover, keydown, load, and submit. Event handling in JavaScript involves attaching event listeners to DOM elements using addEventListener method or inline event handlers. Event objects contain information about the event that occurred. Event delegation is a technique where you attach a single event listener to a parent element to handle events for multiple child elements.'
       },
       {
         id: 7,
         title: 'Asynchronous JavaScript',
         description: 'Understanding callbacks, promises, and async/await',
         duration: '45 minutes',
-        content: ''
+        videoUrl: 'https://www.youtube.com/watch?v=PoRJizFvM7s',
+        content: 'Asynchronous programming allows JavaScript to perform long-running operations without blocking the main thread. Callbacks are functions passed as arguments to other functions and executed after some operation has completed. Promises represent the eventual completion or failure of an asynchronous operation and provide a cleaner way to handle async code. The async/await syntax, introduced in ES2017, makes asynchronous code look and behave more like synchronous code. Understanding asynchronous JavaScript is crucial for working with APIs, file operations, and user interactions.'
       },
       {
         id: 8,
         title: 'Project: Building a Todo App',
         description: 'Apply all learned concepts in a practical project',
         duration: '60 minutes',
-        content: ''
+        videoUrl: 'https://www.youtube.com/watch?v=Ttf3CEsEwMQ',
+        content: 'In this project, you will build a complete Todo application that demonstrates all the JavaScript concepts learned in previous chapters. The app will include features like adding new tasks, marking tasks as complete, deleting tasks, and filtering tasks by status. You will use DOM manipulation to update the interface, event handling to respond to user interactions, arrays to store tasks, and local storage to persist data. This project will help solidify your understanding of JavaScript fundamentals and give you practical experience building a real application.'
       }
     ]
   });
@@ -376,7 +386,7 @@ export default function CourseLayout() {
                           )}
                         </div>
 
-                        {/* Chapter Video with Bilingual Support */}
+                        {/* Chapter Video Tutorial */}
                         {chapter.videoUrl && course.includeVideos && (
                           <div className="ml-11 mb-4">
                             <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-4 border border-gray-200 dark:border-gray-700">
@@ -386,17 +396,16 @@ export default function CourseLayout() {
                                   Video Tutorial
                                 </span>
                                 <span className="text-xs text-gray-500 bg-gray-200 dark:bg-gray-700 px-2 py-1 rounded">
-                                  AI-Generated Content
+                                  Educational Content
                                 </span>
                               </div>
-                              <BilingualYouTubeEmbed
+                              <SimpleYouTubeEmbed
                                 url={chapter.videoUrl}
                                 title={`${chapter.title} - Video Tutorial`}
                                 autoPlay={false}
                                 showControls={true}
-                                className="max-w-2xl"
-                                // Integration point: Pass course language preference if available
-                                defaultLanguage={course.preferredLanguage || null}
+                                className="w-full max-w-4xl"
+                                height="400"
                               />
                             </div>
                           </div>
@@ -404,9 +413,63 @@ export default function CourseLayout() {
 
                         {/* Chapter Content */}
                         {chapter.content && (
-                          <div className="ml-11">
-                            <div className="bg-gray-50 rounded-lg p-4">
-                              <p className="text-gray-700 text-sm leading-relaxed">{chapter.content}</p>
+                          <div className="ml-11 mb-6">
+                            <div className="bg-gray-50 rounded-lg p-6">
+                              <div 
+                                className="prose prose-sm max-w-none text-gray-700 leading-relaxed"
+                                dangerouslySetInnerHTML={{
+                                  __html: chapter.content
+                                    .replace(/## (.*)/g, '<h2 class="text-xl font-bold text-gray-800 mt-6 mb-4 flex items-center gap-2">$1</h2>')
+                                    .replace(/### (.*)/g, '<h3 class="text-lg font-semibold text-gray-800 mt-4 mb-3">$1</h3>')
+                                    .replace(/\*\*(.*?)\*\*/g, '<strong class="font-semibold text-gray-900">$1</strong>')
+                                    .replace(/^- (.*)/gm, '<li class="ml-4 mb-2">$1</li>')
+                                    .replace(/(\n|^)([^<\n].*?)(?=\n|$)/g, '<p class="mb-3">$2</p>')
+                                    .replace(/(<li.*?<\/li>)/gs, '<ul class="list-disc list-inside mb-4 space-y-1">$1</ul>')
+                                }}
+                              />
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Quiz Button Section - Appears after content and videos */}
+                        {(chapter.quiz && chapter.quiz.length > 0) && (
+                          <div className="ml-11 mt-6">
+                            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-4">
+                              <div className="flex items-center justify-between">
+                                <div>
+                                  <h4 className="text-lg font-semibold text-blue-900 mb-1">
+                                    📝 Module Quiz Available
+                                  </h4>
+                                  <p className="text-blue-700 text-sm">
+                                    Test your understanding with {chapter.quiz.length} questions
+                                  </p>
+                                </div>
+                                <button
+                                  onClick={() => {
+                                    // Toggle quiz visibility
+                                    const quizSection = document.getElementById(`quiz-${chapter.id}`);
+                                    if (quizSection) {
+                                      quizSection.style.display = quizSection.style.display === 'none' ? 'block' : 'none';
+                                    }
+                                  }}
+                                  className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-medium transition-colors duration-200 flex items-center gap-2"
+                                >
+                                  🎯 Take Quiz
+                                </button>
+                              </div>
+                            </div>
+                            
+                            {/* Hidden Quiz Section */}
+                            <div id={`quiz-${chapter.id}`} style={{ display: 'none' }} className="mt-4">
+                              <ModuleQuizSection
+                                moduleId={chapter.id}
+                                moduleTitle={chapter.title}
+                                quizData={chapter.quiz}
+                                onScoreUpdate={(score, correct, total) => {
+                                  console.log(`Module ${chapter.title} quiz completed:`, { score, correct, total });
+                                  // You can add additional logic here to update course progress
+                                }}
+                              />
                             </div>
                           </div>
                         )}

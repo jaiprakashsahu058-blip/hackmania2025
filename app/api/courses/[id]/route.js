@@ -32,11 +32,59 @@ export async function GET(request, { params }) {
       .where(eq(chapters.courseId, course.id))
       .orderBy(chapters.orderIndex);
 
-    return NextResponse.json({
-      course: {
-        ...course,
-        chapters: chaptersResult
+    // Handle both old and new course structures
+    const courseResponse = {
+      ...course,
+      // For backward compatibility, provide chapters from both sources
+      chapters: chaptersResult.length > 0 ? chaptersResult : 
+                (course.modules && Array.isArray(course.modules) ? 
+                 course.modules.map((module, index) => ({
+                   id: module.id || `module-${index + 1}`,
+                   title: module.title,
+                   description: module.description,
+                   content: module.description,
+                   quiz: module.quiz || [],
+                   videoUrl: module.videoUrl || null,
+                   videoUrls: module.videoUrls || [],
+                   orderIndex: index + 1
+                 })) : []),
+      // Include modules for new structure
+      modules: course.modules || [],
+      // Ensure boolean flags are properly set
+      includeQuiz: course.include_quiz || false,
+      includeVideos: course.include_videos || false
+    };
+
+    console.log(`📖 Retrieved course: ${course.course_title || course.title}`);
+    console.log(`   📚 Modules: ${courseResponse.modules.length}`);
+    console.log(`   📝 Chapters: ${courseResponse.chapters.length}`);
+    
+    // Debug: Show video information
+    if (course.include_videos) {
+      const modulesWithVideos = courseResponse.modules.filter(m => m.videoUrls && m.videoUrls.length > 0);
+      console.log(`   🎥 Modules with videos: ${modulesWithVideos.length}`);
+      if (modulesWithVideos.length > 0) {
+        console.log(`   📹 Sample module videos:`, modulesWithVideos[0].videoUrls);
       }
+    }
+    
+    if (course.include_quiz) {
+      const modulesWithQuiz = courseResponse.modules.filter(m => m.quiz && m.quiz.length > 0);
+      const chaptersWithQuiz = courseResponse.chapters.filter(ch => ch.quiz && ch.quiz.length > 0);
+      console.log(`   🧩 Modules with quiz: ${modulesWithQuiz.length}`);
+      console.log(`   📝 Chapters with quiz: ${chaptersWithQuiz.length}`);
+      
+      // Debug: Show sample quiz data being sent to frontend
+      if (chaptersWithQuiz.length > 0 && chaptersWithQuiz[0].quiz) {
+        console.log('📋 Sample chapter quiz data for frontend:');
+        console.log('   Chapter:', chaptersWithQuiz[0].title);
+        console.log('   Quiz length:', chaptersWithQuiz[0].quiz.length);
+        console.log('   First question:', chaptersWithQuiz[0].quiz[0]?.question || 'No question');
+      }
+    }
+
+    return NextResponse.json({
+      course: courseResponse
     });
 
   } catch (error) {
